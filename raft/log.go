@@ -14,7 +14,10 @@
 
 package raft
 
-import pb "github.com/pingcap-incubator/tinykv/proto/pkg/eraftpb"
+import (
+	"errors"
+	pb "github.com/pingcap-incubator/tinykv/proto/pkg/eraftpb"
+)
 
 // RaftLog manage the log entries, its struct look like:
 //
@@ -56,7 +59,24 @@ type RaftLog struct {
 // to the state that it just commits and applies the latest snapshot.
 func newLog(storage Storage) *RaftLog {
 	// Your Code Here (2A).
-	return nil
+	firstIndex, _ := storage.FirstIndex()
+	lastIndex, _ := storage.LastIndex()
+	raftLog := &RaftLog{
+		storage:         storage,
+		committed:       firstIndex - 1,
+		applied:         firstIndex - 1,
+		stabled:         firstIndex - 1,
+		pendingSnapshot: nil,
+	}
+	raftLog.entries = make([]pb.Entry, 1)
+	if lastIndex >= firstIndex {
+		entries, _ := storage.Entries(firstIndex, lastIndex+1)
+		raftLog.entries = append(raftLog.entries, entries...)
+	}
+	snapshot, _ := storage.Snapshot()
+	raftLog.pendingSnapshot = &snapshot
+
+	return raftLog
 }
 
 // We need to compact the log entries in some point of time like
@@ -69,23 +89,37 @@ func (l *RaftLog) maybeCompact() {
 // unstableEntries return all the unstable entries
 func (l *RaftLog) unstableEntries() []pb.Entry {
 	// Your Code Here (2A).
-	return nil
+
+	return l.entries
 }
 
 // nextEnts returns all the committed but not applied entries
 func (l *RaftLog) nextEnts() (ents []pb.Entry) {
 	// Your Code Here (2A).
-	return nil
+	return l.entries[l.applied+1 : l.committed+1]
 }
 
 // LastIndex return the last index of the log entries
 func (l *RaftLog) LastIndex() uint64 {
 	// Your Code Here (2A).
-	return 0
+	return l.stabled + uint64(len(l.entries)) - 1
+}
+
+func (l *RaftLog) LastTerm() uint64 {
+	term, _ := l.Term(l.LastIndex())
+	return term
 }
 
 // Term return the term of the entry in the given index
 func (l *RaftLog) Term(i uint64) (uint64, error) {
 	// Your Code Here (2A).
-	return 0, nil
+	if i >= l.stabled+uint64(len(l.entries)) {
+		return None, errors.New("out of index")
+	}
+	term := l.entries[i-l.stabled].Term
+	return term, nil
+}
+
+func (l *RaftLog) append(ents ...pb.Entry) {
+	l.entries = append(l.entries, ents...)
 }

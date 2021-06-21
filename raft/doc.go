@@ -192,7 +192,6 @@ advancing with the given eraftpb.Message. Each step is determined by its
 eraftpb.MessageType. Note that every step is checked by one common method
 'Step' that safety-checks the terms of node and incoming message to prevent
 stale log entries:
-
 	'MessageType_MsgHup' is used for election. If a node is a follower or candidate, the
 	'tick' function in 'raft' struct is set as 'tickElection'. If a follower or
 	candidate has not received any heartbeat before the election timeout, it
