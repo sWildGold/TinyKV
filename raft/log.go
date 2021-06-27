@@ -53,6 +53,7 @@ type RaftLog struct {
 	pendingSnapshot *pb.Snapshot
 
 	// Your Data Here (2A).
+	offset uint64
 }
 
 // newLog returns log using the given storage. It recovers the log
@@ -63,19 +64,17 @@ func newLog(storage Storage) *RaftLog {
 	lastIndex, _ := storage.LastIndex()
 	raftLog := &RaftLog{
 		storage:         storage,
-		committed:       firstIndex - 1,
-		applied:         firstIndex - 1,
-		stabled:         firstIndex - 1,
+		committed:       0,
+		applied:         0,
+		stabled:         lastIndex,
 		pendingSnapshot: nil,
 	}
-	raftLog.entries = make([]pb.Entry, 1)
-	if lastIndex >= firstIndex {
-		entries, _ := storage.Entries(firstIndex, lastIndex+1)
-		raftLog.entries = append(raftLog.entries, entries...)
-	}
+	raftLog.entries = make([]pb.Entry, 0)
+	entries, _ := storage.Entries(firstIndex, lastIndex+1)
+	raftLog.entries = append(raftLog.entries, entries...)
 	snapshot, _ := storage.Snapshot()
 	raftLog.pendingSnapshot = &snapshot
-
+	raftLog.offset = raftLog.pendingSnapshot.Metadata.Index
 	return raftLog
 }
 
@@ -90,19 +89,28 @@ func (l *RaftLog) maybeCompact() {
 func (l *RaftLog) unstableEntries() []pb.Entry {
 	// Your Code Here (2A).
 
-	return l.entries
+	return l.entries[l.stabled-l.offset:]
 }
 
 // nextEnts returns all the committed but not applied entries
 func (l *RaftLog) nextEnts() (ents []pb.Entry) {
 	// Your Code Here (2A).
-	return l.entries[l.applied+1 : l.committed+1]
+	if len(l.entries) == 0 {
+		return nil
+	}
+	firstIndex := l.entries[0].Index
+	ents = make([]pb.Entry, 0)
+	ents = append(ents, l.entries[l.applied+1-firstIndex:l.committed+1-firstIndex]...)
+	return ents
 }
 
 // LastIndex return the last index of the log entries
 func (l *RaftLog) LastIndex() uint64 {
 	// Your Code Here (2A).
-	return l.stabled + uint64(len(l.entries)) - 1
+	if len(l.entries) == 0 {
+		return l.offset
+	}
+	return l.entries[len(l.entries)-1].Index
 }
 
 func (l *RaftLog) LastTerm() uint64 {
@@ -113,10 +121,10 @@ func (l *RaftLog) LastTerm() uint64 {
 // Term return the term of the entry in the given index
 func (l *RaftLog) Term(i uint64) (uint64, error) {
 	// Your Code Here (2A).
-	if i >= l.stabled+uint64(len(l.entries)) {
+	if i-l.offset-1 >= uint64(len(l.entries)) || i-l.offset-1 < 0 {
 		return None, errors.New("out of index")
 	}
-	term := l.entries[i-l.stabled].Term
+	term := l.entries[i-l.offset-1].Term
 	return term, nil
 }
 
