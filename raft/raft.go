@@ -199,14 +199,16 @@ func newRaft(c *Config) *Raft {
 		panic(err.Error())
 	}
 	// Your Code Here (2A).
-	hardState, _, _ := c.Storage.InitialState()
-
+	hardState, confState, _ := c.Storage.InitialState()
+	if c.peers == nil {
+		c.peers = confState.Nodes
+	}
 	r := &Raft{
 		id:               c.ID,
 		Term:             hardState.Term,
 		Vote:             hardState.Vote,
 		RaftLog:          newLog(c.Storage),
-		Prs:              nil,
+		Prs:              make(map[uint64]*Progress),
 		State:            StateFollower,
 		msgs:             nil,
 		Lead:             None,
@@ -214,12 +216,22 @@ func newRaft(c *Config) *Raft {
 		electionTimeout:  c.ElectionTick,
 		peers:            c.peers,
 	}
+
 	r.tick = r.tickElection
 	r.step = stepFollower
 	r.heartbeatElapsed = 0
 	r.electionElapsed = 0
 	r.State = StateFollower
 	r.resetRandomizedElectionTimeOut()
+	lastIndex := r.RaftLog.LastIndex()
+	for _, peer := range r.peers {
+		if peer == r.id {
+			r.Prs[peer] = &Progress{Next: lastIndex + 1, Match: lastIndex}
+		} else {
+			r.Prs[peer] = &Progress{Next: lastIndex + 1}
+		}
+	}
+
 	r.logger = *log.New()
 	r.logger.SetLevel(log.LOG_LEVEL_NONE)
 	r.logger.Debugf("[id:%x]newRaft", r.id)
@@ -508,12 +520,14 @@ func (r *Raft) handleAppendEntries(m pb.Message) {
 			i++
 		}
 		if !noConflict {
-			r.RaftLog.entries = append(make([]pb.Entry, 0), r.RaftLog.entries[:i-r.RaftLog.offset-1]...)
+			//r.RaftLog.entries = append(make([]pb.Entry, 0), r.RaftLog.entries[:i-r.RaftLog.offset-1]...)
+			r.RaftLog.entries = r.RaftLog.entries[:i-r.RaftLog.offset-1]
 			r.RaftLog.stabled = min(r.RaftLog.LastIndex(), r.RaftLog.stabled)
-
+			newEntries := make([]pb.Entry, 0, len(m.Entries))
 			for ; int(i-m.Index-1) < len(m.Entries); i++ {
-				r.RaftLog.entries = append(r.RaftLog.entries, *m.Entries[i-m.Index-1])
+				newEntries = append(newEntries, *m.Entries[i-m.Index-1])
 			}
+			r.RaftLog.entries = append(r.RaftLog.entries, newEntries...)
 		}
 		if m.Commit > r.RaftLog.committed {
 			r.RaftLog.committed = min(m.Commit, r.RaftLog.LastIndex())
@@ -762,4 +776,8 @@ func (r *Raft) advance(rd Ready) {
 	if l.pendingSnapshot != nil && rd.Snapshot.Metadata != nil && rd.Snapshot.Metadata.Index == l.pendingSnapshot.Metadata.Index {
 		l.pendingSnapshot = nil
 	}
+}
+
+func (r *Raft) GetId() uint64 {
+	return r.id
 }

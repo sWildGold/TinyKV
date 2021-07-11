@@ -169,7 +169,7 @@ func (rn *RawNode) Ready() Ready {
 	// Your Code Here (2A).
 	r := rn.Raft
 	var snapshot pb.Snapshot
-	if r.RaftLog.pendingSnapshot != nil && r.RaftLog.pendingSnapshot.Metadata.Index != 0 {
+	if r.RaftLog.pendingSnapshot != nil && r.RaftLog.pendingSnapshot.Metadata != nil && r.RaftLog.pendingSnapshot.Metadata.Index != 0 {
 		snapshot = *r.RaftLog.pendingSnapshot
 	}
 	ready := Ready{
@@ -203,7 +203,7 @@ func (rn *RawNode) HasReady() bool {
 	if len(r.RaftLog.unstableEntries()) != 0 {
 		return true
 	}
-	if r.RaftLog.pendingSnapshot != nil && r.RaftLog.pendingSnapshot.Metadata.Index != 0 {
+	if r.RaftLog.pendingSnapshot != nil && r.RaftLog.pendingSnapshot.Metadata != nil && r.RaftLog.pendingSnapshot.Metadata.Index != 0 {
 		return true
 	}
 	if len(r.RaftLog.nextEnts()) != 0 {
@@ -237,4 +237,8 @@ func (rn *RawNode) GetProgress() map[uint64]Progress {
 // TransferLeader tries to transfer leadership to the given transferee.
 func (rn *RawNode) TransferLeader(transferee uint64) {
 	_ = rn.Raft.Step(pb.Message{MsgType: pb.MessageType_MsgTransferLeader, From: transferee})
+}
+
+func (rn *RawNode) GetId() uint64 {
+	return rn.Raft.GetId()
 }

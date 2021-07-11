@@ -66,16 +66,14 @@ func newLog(storage Storage) *RaftLog {
 	raftLog := &RaftLog{
 		storage:         storage,
 		committed:       hardSt.Commit,
-		applied:         0,
+		applied:         firstIndex - 1,
 		stabled:         lastIndex,
 		pendingSnapshot: nil,
+		offset:          firstIndex - 1,
 	}
 	raftLog.entries = make([]pb.Entry, 0)
 	entries, _ := storage.Entries(firstIndex, lastIndex+1)
 	raftLog.entries = append(raftLog.entries, entries...)
-	snapshot, _ := storage.Snapshot()
-	raftLog.pendingSnapshot = &snapshot
-	raftLog.offset = raftLog.pendingSnapshot.Metadata.Index
 	return raftLog
 }
 
@@ -89,7 +87,9 @@ func (l *RaftLog) maybeCompact() {
 // unstableEntries return all the unstable entries
 func (l *RaftLog) unstableEntries() []pb.Entry {
 	// Your Code Here (2A).
-
+	if int(l.stabled-l.offset) > len(l.entries) {
+		return nil
+	}
 	return l.entries[l.stabled-l.offset:]
 }
 

@@ -390,3 +390,7 @@ func (p *peer) sendRaftMessage(msg eraftpb.Message, trans Transport) error {
 	sendMsg.Message = &msg
 	return trans.Send(sendMsg)
 }
+
+func (p *peer) GetId() uint64 {
+	return p.RaftGroup.GetId()
+}

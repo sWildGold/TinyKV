@@ -4,7 +4,10 @@ import (
 	"bytes"
 	"fmt"
 	"math/rand"
+	"net/http"
 	_ "net/http/pprof"
+	"os"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -155,6 +158,8 @@ func confchanger(t *testing.T, cluster *Cluster, ch chan bool, done *int32) {
 // - If confchangee is set, the cluster will schedule random conf change concurrently.
 // - If split is set, split region when size exceed 1024 bytes.
 func GenericTest(t *testing.T, part string, nclients int, unreliable bool, crash bool, partitions bool, maxraftlog int, confchange bool, split bool) {
+	//trace.Start(os.Stderr)
+	//defer trace.Stop()
 	title := "Test: "
 	if unreliable {
 		// the network drops RPC requests and replies.
@@ -177,7 +182,7 @@ func GenericTest(t *testing.T, part string, nclients int, unreliable bool, crash
 		title = title + "one client"
 	}
 	title = title + " (" + part + ")" // 3A or 3B
-
+	log.Info(title)
 	nservers := 5
 	cfg := config.NewTestConfig()
 	if maxraftlog != -1 {
@@ -341,9 +346,35 @@ func GenericTest(t *testing.T, part string, nclients int, unreliable bool, crash
 	}
 }
 
+func readMemStats() {
+
+	var ms runtime.MemStats
+
+	runtime.ReadMemStats(&ms)
+	log.Warnf(" ===> Alloc:%d(bytes) HeapIdle:%d(bytes) HeapReleased:%d(bytes)", ms.Alloc, ms.HeapIdle, ms.HeapReleased)
+}
+
 func TestBasic2B(t *testing.T) {
 	// Test: one client (2B) ...
 	GenericTest(t, "2B", 1, false, false, false, -1, false, false)
+
+}
+
+func TestMem(t *testing.T) {
+	//go func() {
+	//	for {
+	//		readMemStats()
+	//		time.Sleep(time.Second)
+	//	}
+	//}()
+	//TestBasic2B(t)
+	ip := "0.0.0.0:6061"
+	if err := http.ListenAndServe(ip, nil); err != nil {
+		fmt.Printf("start pprof failed on %s\n", ip)
+		os.Exit(1)
+	}
+	TestBasic2B(t)
+
 }
 
 func TestConcurrent2B(t *testing.T) {
